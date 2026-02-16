@@ -99,7 +99,7 @@ export default class SidebarNotesPlugin extends Plugin {
 		void this.app.workspace.revealLeaf(leaf);
 	}
 
-	async loadSideNote(file: TFile): Promise<string> {
+	loadSideNote(file: TFile): string {
 		return readSideNote(this.app, file);
 	}
 
