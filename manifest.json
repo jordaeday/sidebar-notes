@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "sidebar-notes",
+	"name": "Sidebar Notes",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"description": "Pair every note with a synced sidebar note for summaries or extraneous notes.",
+	"author": "Jordan Day",
+	"authorUrl": "https://github.com/jordaeday",
+	"isDesktopOnly": true
 }
