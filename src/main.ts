@@ -1,99 +1,137 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {Notice, Platform, Plugin, TFile, WorkspaceLeaf} from 'obsidian';
+import {DEFAULT_SETTINGS, SidebarNotesSettings, SidebarNotesSettingTab} from "./settings";
+import {SideNoteView, SIDE_NOTE_VIEW_TYPE} from "./view/SideNoteView";
+import {readSideNote, writeSideNote} from "./storage/sideNoteStore";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class SidebarNotesPlugin extends Plugin {
+	settings: SidebarNotesSettings;
+	private sideNoteView: SideNoteView | null = null;
+	private activeFile: TFile | null = null;
+	private suppressReloadForPath: string | null = null;
+	private suppressReloadTimeout: number | null = null;
 
 	async onload() {
+		if (!Platform.isDesktopApp) {
+			new Notice('Sidebar notes is desktop-only and disabled on mobile.');
+			return;
+		}
+
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+		this.registerViews();
+		this.addSettingTab(new SidebarNotesSettingTab(this.app, this));
+		this.registerCommands();
+		this.registerEvent(this.app.workspace.on('file-open', (file) => {
+			void this.handleFileOpen(file);
+		}));
+		this.registerEvent(this.app.metadataCache.on('changed', (file) => {
+			if (!this.activeFile || file.path !== this.activeFile.path) {
+				return;
 			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
+			if (this.suppressReloadForPath === file.path) {
+				this.suppressReloadForPath = null;
+				return;
 			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
+			if (this.sideNoteView && !this.sideNoteView.isUserEditing()) {
+				void this.sideNoteView.setFile(this.activeFile);
 			}
+		}));
+
+		this.app.workspace.onLayoutReady(() => {
+			void this.handleFileOpen(this.app.workspace.getActiveFile());
 		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
 	}
 
 	onunload() {
+		if (this.suppressReloadTimeout) {
+			window.clearTimeout(this.suppressReloadTimeout);
+			this.suppressReloadTimeout = null;
+		}
+	}
+
+	private registerViews() {
+		this.registerView(SIDE_NOTE_VIEW_TYPE, (leaf: WorkspaceLeaf) => new SideNoteView(leaf, this));
+	}
+
+	private registerCommands() {
+		this.addRibbonIcon('columns', 'Show side notes', () => {
+			void this.revealSideNotes();
+		});
+
+		this.addCommand({
+			id: 'open',
+			name: 'Show side notes',
+			callback: () => {
+				void this.revealSideNotes();
+			}
+		});
+
+	}
+
+	registerSideNoteView(view: SideNoteView) {
+		this.sideNoteView = view;
+		void this.sideNoteView.setFile(this.activeFile);
+	}
+
+	unregisterSideNoteView(view: SideNoteView) {
+		if (this.sideNoteView === view) {
+			this.sideNoteView = null;
+		}
+	}
+
+	private async handleFileOpen(file: TFile | null) {
+		this.activeFile = file;
+		if (this.sideNoteView) {
+			await this.sideNoteView.setFile(this.activeFile);
+		} else if (this.settings.autoOpenSidebar && this.activeFile) {
+			await this.revealSideNotes();
+		}
+	}
+
+	async revealSideNotes() {
+		let leaf = this.getExistingSideNoteLeaf();
+		if (!leaf) {
+			leaf = this.app.workspace.getRightLeaf(false);
+			if (!leaf) {
+				return;
+			}
+			await leaf.setViewState({type: SIDE_NOTE_VIEW_TYPE, active: true});
+		}
+		void this.app.workspace.revealLeaf(leaf);
+	}
+
+	async loadSideNote(file: TFile): Promise<string> {
+		return readSideNote(this.app, file);
+	}
+
+	async persistSideNote(file: TFile, content: string): Promise<void> {
+		this.suppressReloadForPath = file.path;
+		if (this.suppressReloadTimeout) {
+			window.clearTimeout(this.suppressReloadTimeout);
+		}
+		this.suppressReloadTimeout = window.setTimeout(() => {
+			if (this.suppressReloadForPath === file.path) {
+				this.suppressReloadForPath = null;
+			}
+			this.suppressReloadTimeout = null;
+		}, 1500);
+		try {
+			await writeSideNote(this.app, file, content);
+		} finally {
+			// Keep suppression until metadata change fires.
+		}
+	}
+
+
+	private getExistingSideNoteLeaf(): WorkspaceLeaf | null {
+		const leaves = this.app.workspace.getLeavesOfType(SIDE_NOTE_VIEW_TYPE);
+		return leaves[0] ?? null;
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<SidebarNotesSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
 	}
 }
