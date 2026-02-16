@@ -5,7 +5,6 @@ import {readSideNote, writeSideNote} from "./storage/sideNoteStore";
 
 export default class SidebarNotesPlugin extends Plugin {
 	settings: SidebarNotesSettings;
-	private sideNoteView: SideNoteView | null = null;
 	private activeFile: TFile | null = null;
 	private suppressReloadForPath: string | null = null;
 	private suppressReloadTimeout: number | null = null;
@@ -31,8 +30,9 @@ export default class SidebarNotesPlugin extends Plugin {
 				this.suppressReloadForPath = null;
 				return;
 			}
-			if (this.sideNoteView && !this.sideNoteView.isUserEditing()) {
-				void this.sideNoteView.setFile(this.activeFile);
+			const view = this.getSideNoteView();
+			if (view && !view.isUserEditing()) {
+				void view.setFile(this.activeFile);
 			}
 		}));
 
@@ -67,21 +67,16 @@ export default class SidebarNotesPlugin extends Plugin {
 
 	}
 
-	registerSideNoteView(view: SideNoteView) {
-		this.sideNoteView = view;
-		void this.sideNoteView.setFile(this.activeFile);
-	}
-
-	unregisterSideNoteView(view: SideNoteView) {
-		if (this.sideNoteView === view) {
-			this.sideNoteView = null;
-		}
+	private getSideNoteView(): SideNoteView | null {
+		const leaf = this.getExistingSideNoteLeaf();
+		return leaf ? leaf.view as SideNoteView : null;
 	}
 
 	private async handleFileOpen(file: TFile | null) {
 		this.activeFile = file;
-		if (this.sideNoteView) {
-			await this.sideNoteView.setFile(this.activeFile);
+		const view = this.getSideNoteView();
+		if (view) {
+			await view.setFile(this.activeFile);
 		} else if (this.settings.autoOpenSidebar && this.activeFile) {
 			await this.revealSideNotes();
 		}

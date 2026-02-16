@@ -45,11 +45,11 @@ export class SideNoteView extends ItemView {
 		this.textAreaEl.addEventListener("input", () => this.handleInput());
 		this.saveDebounced = debounce(() => this.persistCurrentContent(), 600);
 
-		this.plugin.registerSideNoteView(this);
+		void this.setFile(this.app.workspace.getActiveFile());
 	}
 
 	async onClose(): Promise<void> {
-		this.plugin.unregisterSideNoteView(this);
+		// View cleanup handled by Obsidian
 	}
 
 	async setFile(file: TFile | null): Promise<void> {
