@@ -29,7 +29,7 @@ export class SideNoteView extends ItemView {
 		return "layout-grid";
 	}
 
-	onOpen(): void {
+	onOpen(): Promise<void> {
 		this.contentEl.empty();
 		this.contentEl.addClass("sidebar-notes-view");
 
@@ -45,7 +45,8 @@ export class SideNoteView extends ItemView {
 		this.textAreaEl.addEventListener("input", () => this.handleInput());
 		this.saveDebounced = debounce(() => this.persistCurrentContent(), 600);
 
-		void this.setFile(this.app.workspace.getActiveFile());
+		this.setFile(this.app.workspace.getActiveFile());
+		return Promise.resolve();
 	}
 
 	async onClose(): Promise<void> {
