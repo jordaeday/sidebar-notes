@@ -76,7 +76,7 @@ export default class SidebarNotesPlugin extends Plugin {
 		this.activeFile = file;
 		const view = this.getSideNoteView();
 		if (view) {
-			await view.setFile(this.activeFile);
+			view.setFile(this.activeFile);
 		} else if (this.settings.autoOpenSidebar && this.activeFile) {
 			await this.revealSideNotes();
 		}

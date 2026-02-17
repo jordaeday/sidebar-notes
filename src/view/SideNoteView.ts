@@ -29,7 +29,7 @@ export class SideNoteView extends ItemView {
 		return "layout-grid";
 	}
 
-	async onOpen(): Promise<void> {
+	onOpen(): void {
 		this.contentEl.empty();
 		this.contentEl.addClass("sidebar-notes-view");
 
@@ -52,7 +52,7 @@ export class SideNoteView extends ItemView {
 		// View cleanup handled by Obsidian
 	}
 
-	async setFile(file: TFile | null): Promise<void> {
+	setFile(file: TFile | null): void {
 		this.currentFile = file;
 
 		if (!this.textAreaEl || !this.fileNameEl) {
